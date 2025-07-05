@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>डेली क्विज़ + Admin Panel</title>
+<title>डेली क्विज़ + Admin Panel (Bulk Paste)</title>
 <style>
-  body { font-family: 'Noto Sans Devanagari', sans-serif; max-width: 700px; margin: auto; background: #fffbe6; padding: 20px; }
+  body { font-family: 'Noto Sans Devanagari', sans-serif; max-width: 800px; margin: auto; background: #fffbe6; padding: 20px; }
   h1, h2 { text-align: center; color: #d35400; }
   label { display: block; margin-top: 10px; font-weight: bold; }
-  input[type=text], select, textarea { width: 100%; padding: 8px; margin-top: 5px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; }
+  input[type=text], select, textarea { width: 100%; padding: 8px; margin-top: 5px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; font-family: monospace; }
   button { background: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin-top: 15px; font-size: 16px; }
   button:hover { background: #219150; }
   .question { margin: 15px 0; }
@@ -16,7 +16,8 @@
   .option { margin-left: 20px; }
   .hidden { display: none; }
   .error { color: red; text-align: center; }
-  .success { color: green; text-align: center; font-weight: bold; margin-top: 10px; }
+  .success { color: green; text-align: center; font-weight: bold; margin-top: 10px; white-space: pre-wrap; }
+  textarea { height: 300px; }
 </style>
 </head>
 <body>
@@ -32,15 +33,10 @@
 </div>
 
 <div id="adminPanel" class="hidden">
-  <h2>Admin Panel - प्रश्न जोड़ें</h2>
-  <label>दिनांक (YYYY-MM-DD):</label>
-  <input type="text" id="quizDate" placeholder="2025-07-05" />
-
-  <div id="questionsInput">
-    <!-- 5 प्रश्न के लिए इनपुट -->
-  </div>
-
-  <button onclick="saveQuestions()">प्रश्न सेव करें</button>
+  <h2>Admin Panel - क्विज़ डेटा Bulk Paste करें</h2>
+  <label>डेटा (टैब या कॉमा सेपरेटेड फ़ॉर्मेट में, पहली लाइन हेडर होनी चाहिए):</label>
+  <textarea id="bulkData" placeholder="यहाँ आपका डेटा पेस्ट करें..."></textarea>
+  <button onclick="saveBulkData()">डेटा सेव करें</button>
   <p id="saveMessage" class="success"></p>
   <button onclick="adminLogout()" style="background:#c0392b; margin-top:30px;">लॉगआउट करें</button>
 </div>
@@ -78,8 +74,8 @@
   const quizSection = document.getElementById("quizSection");
   const loginError = document.getElementById("loginError");
   const saveMessage = document.getElementById("saveMessage");
+  const bulkDataTextarea = document.getElementById("bulkData");
   const quizQuestionsDiv = document.getElementById("quizQuestions");
-  const questionsInputDiv = document.getElementById("questionsInput");
   const resultMessage = document.getElementById("resultMessage");
 
   // Admin Login
@@ -90,7 +86,11 @@
       adminPanel.classList.remove("hidden");
       quizSection.classList.add("hidden");
       loginError.textContent = "";
-      generateQuestionInputs();
+
+      // Load existing data if any in bulk textarea for edit
+      const allData = localStorage.getItem("quizRawData");
+      if(allData) bulkDataTextarea.value = allData;
+
       saveMessage.textContent = "";
     } else {
       loginError.textContent = "गलत पासवर्ड!";
@@ -106,67 +106,89 @@
     loadQuizForToday();
   }
 
-  // Generate 5 question input blocks for admin
-  function generateQuestionInputs(){
-    questionsInputDiv.innerHTML = "";
-    for(let i=1; i<=5; i++){
-      questionsInputDiv.innerHTML += `
-        <div style="border:1px solid #ccc; padding:10px; margin:10px 0; border-radius:6px;">
-          <label>प्रश्न ${i}:</label>
-          <input type="text" id="q${i}" placeholder="प्रश्न लिखें" style="margin-bottom:6px;" required />
-          <label>विकल्प 1:</label>
-          <input type="text" id="q${i}o1" placeholder="विकल्प 1" required />
-          <label>विकल्प 2:</label>
-          <input type="text" id="q${i}o2" placeholder="विकल्प 2" required />
-          <label>विकल्प 3:</label>
-          <input type="text" id="q${i}o3" placeholder="विकल्प 3" required />
-          <label>विकल्प 4:</label>
-          <input type="text" id="q${i}o4" placeholder="विकल्प 4" required />
-          <label>सही विकल्प (1-4):</label>
-          <input type="number" id="q${i}ans" min="1" max="4" required />
-        </div>`;
-    }
-  }
-
-  // Save questions to localStorage keyed by date
-  function saveQuestions(){
-    const date = document.getElementById("quizDate").value.trim();
-    if(!date.match(/^\d{4}-\d{2}-\d{2}$/)){
-      alert("कृपया सही दिनांक डालें (YYYY-MM-DD)");
+  // Parse pasted bulk data (CSV or TSV) and save as JSON by date
+  function saveBulkData(){
+    const rawText = bulkDataTextarea.value.trim();
+    if(!rawText){
+      alert("कृपया डेटा पेस्ट करें।");
       return;
     }
 
-    const questions = [];
+    try {
+      // Save raw data for later edit
+      localStorage.setItem("quizRawData", rawText);
 
-    for(let i=1; i<=5; i++){
-      const q = document.getElementById(`q${i}`).value.trim();
-      const o1 = document.getElementById(`q${i}o1`).value.trim();
-      const o2 = document.getElementById(`q${i}o2`).value.trim();
-      const o3 = document.getElementById(`q${i}o3`).value.trim();
-      const o4 = document.getElementById(`q${i}o4`).value.trim();
-      const ans = document.getElementById(`q${i}ans`).value.trim();
-
-      if(!q || !o1 || !o2 || !o3 || !o4 || !(ans >= 1 && ans <=4)){
-        alert(`कृपया प्रश्न ${i} के सभी फील्ड सही भरें।`);
+      const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if(lines.length < 2){
+        alert("डेटा कम है, कम से कम हेडर और एक लाइन होनी चाहिए।");
         return;
       }
 
-      questions.push({question:q, options:[o1,o2,o3,o4], correct: Number(ans)});
+      // detect delimiter - comma या tab
+      const delimiter = lines[0].includes(',') ? ',' : '\t';
+
+      // Parse header
+      const headers = lines[0].split(delimiter).map(h => h.trim());
+
+      // Validate header format minimum columns
+      const requiredHeaders = ["Date","Q1","Q1O1","Q1O2","Q1O3","Q1O4","Q1Ans",
+        "Q2","Q2O1","Q2O2","Q2O3","Q2O4","Q2Ans",
+        "Q3","Q3O1","Q3O2","Q3O3","Q3O4","Q3Ans",
+        "Q4","Q4O1","Q4O2","Q4O3","Q4O4","Q4Ans",
+        "Q5","Q5O1","Q5O2","Q5O3","Q5O4","Q5Ans"
+      ];
+
+      for(const h of requiredHeaders){
+        if(!headers.includes(h)){
+          alert(`Header missing: ${h}`);
+          return;
+        }
+      }
+
+      // Indexes map
+      const idxMap = {};
+      headers.forEach((h,i) => { idxMap[h] = i; });
+
+      // Process data rows
+      const quizData = {};
+
+      for(let i=1; i<lines.length; i++){
+        const row = lines[i].split(delimiter).map(c => c.trim());
+
+        const date = row[idxMap["Date"]];
+        if(!date.match(/^\d{4}-\d{2}-\d{2}$/)){
+          alert(`Invalid date format in line ${i+1}: ${date}`);
+          return;
+        }
+
+        quizData[date] = [];
+
+        for(let q=1; q<=5; q++){
+          quizData[date].push({
+            question: row[idxMap[`Q${q}`]],
+            options: [
+              row[idxMap[`Q${q}O1`]],
+              row[idxMap[`Q${q}O2`]],
+              row[idxMap[`Q${q}O3`]],
+              row[idxMap[`Q${q}O4`]],
+            ],
+            correct: Number(row[idxMap[`Q${q}Ans`]])
+          });
+        }
+      }
+
+      // Save parsed JSON data in localStorage
+      localStorage.setItem("quizData", JSON.stringify(quizData));
+
+      saveMessage.textContent = "डेटा सफलतापूर्वक सेव हो गया!";
+
+      bulkDataTextarea.value = ""; // साफ करें, चाहे आप चाहें तो रख सकते हैं
+    } catch(e){
+      alert("डेटा पार्सिंग में त्रुटि: " + e.message);
     }
-
-    // Save in localStorage as: { "2025-07-05": [ {q,o,c}, {...} ] }
-    let allData = JSON.parse(localStorage.getItem("quizData") || "{}");
-    allData[date] = questions;
-    localStorage.setItem("quizData", JSON.stringify(allData));
-
-    saveMessage.textContent = `प्रश्न दिनांक ${date} के लिए सेव हो गए।`;
-
-    // Clear inputs
-    document.getElementById("quizDate").value = "";
-    generateQuestionInputs();
   }
 
-  // Load quiz for today's date or show message
+  // Load today's quiz and show
   function loadQuizForToday(){
     const today = new Date().toISOString().slice(0,10);
     const allData = JSON.parse(localStorage.getItem("quizData") || "{}");
@@ -185,7 +207,6 @@
       qDiv.classList.add("question");
       qDiv.innerHTML = `<h3>प्रश्न ${i+1}: ${q.question}</h3>`;
       q.options.forEach((opt,idx) => {
-        const optionId = `q${i}o${idx}`;
         qDiv.innerHTML += `
           <label class="option">
             <input type="radio" name="q${i}" value="${idx+1}" required />
@@ -227,7 +248,6 @@
       }
 
       let score = 0;
-      let answers = [];
 
       for(let i=0; i<todayQuestions.length; i++){
         const selected = document.querySelector(`input[name="q${i}"]:checked`);
@@ -235,16 +255,12 @@
           alert("कृपया सभी प्रश्नों के उत्तर दें।");
           return;
         }
-        answers.push(Number(selected.value));
         if(Number(selected.value) === todayQuestions[i].correct){
           score++;
         }
       }
 
       resultMessage.textContent = `✅ आपका स्कोर: ${score} / ${todayQuestions.length}`;
-
-      // आप चाहें तो यहां user responses को भी save कर सकते हैं (localStorage या server पर)
-      // फिलहाल केवल स्क्रीन पर दिखा रहे हैं।
 
       this.reset();
     });
