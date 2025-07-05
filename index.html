@@ -36,7 +36,7 @@
 
 <div id="quizSection" class="hidden">
   <h2>क्विज़ प्रश्न</h2>
-  <form id="quizForm">
+  <form id="quizForm" novalidate>
     <!-- Questions dynamically inserted here -->
   </form>
   <button id="submitQuizBtn" disabled>सबमिट करें</button>
@@ -48,10 +48,8 @@
 </div>
 
 <script>
-// ==== Configuration ====
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyLlf5H0XntHRT5I6lFxhXi_qUeI2MLqR90RAHjE0FR4zPzfVjsKv4nWZmUIN6OtmHj/exec';  // Your Apps Script URL
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyLlf5H0XntHRT5I6lFxhXi_qUeI2MLqR90RAHjE0FR4zPzfVjsKv4nWZmUIN6OtmHj/exec';
 
-// ==== Sample quiz data (आप इसे admin panel से update कर सकते हैं) ====
 const quizData = [
   {
     q: 'भारत का राष्ट्रीय फूल क्या है?',
@@ -80,11 +78,8 @@ const quizData = [
   }
 ];
 
-// ==== Variables ====
 let userData = {};
 let userAnswers = new Array(quizData.length).fill(null);
-
-// ==== Functions ====
 
 function showIntro() {
   document.getElementById('introSection').classList.remove('hidden');
@@ -97,12 +92,19 @@ function startQuiz() {
   const mobile = document.getElementById('mobile').value.trim();
   const category = document.getElementById('category').value;
 
-  if (!name || !mobile.match(/^\d{10}$/) || !category) {
-    alert('सभी फ़ील्ड सही से भरें।');
+  if (!name) {
+    alert('कृपया नाम दर्ज करें।');
+    return;
+  }
+  if (!mobile.match(/^\d{10}$/)) {
+    alert('कृपया सही 10 अंकों का मोबाइल नंबर दर्ज करें।');
+    return;
+  }
+  if (!category) {
+    alert('कृपया श्रेणी चुनें।');
     return;
   }
 
-  // Check localStorage if user already submitted today
   const todayKey = `quiz_submitted_${mobile}_${new Date().toISOString().slice(0,10)}`;
   if (localStorage.getItem(todayKey)) {
     alert('आपने आज पहले ही क्विज़ दिया है।');
@@ -131,13 +133,15 @@ function showQuiz() {
     form.appendChild(div);
   });
 
-  // Enable submit button only if all questions answered
+  // Enable submit button only if all questions are answered
   form.onchange = () => {
     const allAnswered = quizData.every((_, i) => {
-      return form[`q${i}`].value;
+      const radios = form.querySelectorAll(`input[name="q${i}"]`);
+      return Array.from(radios).some(r => r.checked);
     });
     document.getElementById('submitQuizBtn').disabled = !allAnswered;
   };
+
   document.getElementById('submitQuizBtn').disabled = true;
 }
 
@@ -145,27 +149,25 @@ function submitQuiz() {
   const form = document.getElementById('quizForm');
   const answers = [];
   for(let i=0; i<quizData.length; i++) {
-    const val = form[`q${i}`].value;
-    if(!val) {
+    const radios = form.querySelectorAll(`input[name="q${i}"]`);
+    const checked = Array.from(radios).find(r => r.checked);
+    if (!checked) {
       alert('कृपया सभी प्रश्नों का उत्तर दें।');
       return;
     }
-    answers.push(val);
+    answers.push(parseInt(checked.value));
   }
 
-  // Calculate score
   let score = 0;
   for(let i=0; i<quizData.length; i++) {
-    if(parseInt(answers[i]) === quizData[i].ans) score++;
+    if(answers[i] === quizData[i].ans) score++;
   }
 
   userAnswers = answers;
 
-  // Save submission in localStorage to prevent multiple attempts per day
   const todayKey = `quiz_submitted_${userData.mobile}_${new Date().toISOString().slice(0,10)}`;
   localStorage.setItem(todayKey, 'true');
 
-  // Send to Google Sheet backend
   sendToSheet(answers, score);
 
   showResult(score);
@@ -180,7 +182,7 @@ function showResult(score) {
   container.innerHTML = `<p>आपका स्कोर: <strong>${score} / ${quizData.length}</strong></p>`;
 
   quizData.forEach((item, idx) => {
-    const userAns = parseInt(userAnswers[idx]);
+    const userAns = userAnswers[idx];
     const correctAns = item.ans;
     const isCorrect = userAns === correctAns;
     const div = document.createElement('div');
@@ -195,7 +197,7 @@ function showResult(score) {
 }
 
 function sendToSheet(answers, score) {
-  fetch('https://script.google.com/macros/s/AKfycbyLlf5H0XntHRT5I6lFxhXi_qUeI2MLqR90RAHjE0FR4zPzfVjsKv4nWZmUIN6OtmHj/exec', {
+  fetch(SCRIPT_URL, {
     method: 'POST',
     body: JSON.stringify({
       name: userData.name,
@@ -209,11 +211,10 @@ function sendToSheet(answers, score) {
     }
   })
   .then(res => res.text())
-  .then(res => console.log('Data saved:', res))
-  .catch(err => console.error('Error:', err));
+  .then(res => console.log('डेटा सेव हो गया:', res))
+  .catch(err => console.error('त्रुटि:', err));
 }
 
-// ==== Event Listeners ====
 document.getElementById('startQuizBtn').onclick = startQuiz;
 document.getElementById('submitQuizBtn').onclick = submitQuiz;
 
