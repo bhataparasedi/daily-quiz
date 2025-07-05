@@ -3,268 +3,220 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>डेली क्विज़ + Admin Panel (Bulk Paste)</title>
+<title>दैनिक क्विज़</title>
 <style>
-  body { font-family: 'Noto Sans Devanagari', sans-serif; max-width: 800px; margin: auto; background: #fffbe6; padding: 20px; }
-  h1, h2 { text-align: center; color: #d35400; }
-  label { display: block; margin-top: 10px; font-weight: bold; }
-  input[type=text], select, textarea { width: 100%; padding: 8px; margin-top: 5px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; font-family: monospace; }
-  button { background: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin-top: 15px; font-size: 16px; }
-  button:hover { background: #219150; }
-  .question { margin: 15px 0; }
-  .question h3 { margin-bottom: 5px; }
-  .option { margin-left: 20px; }
-  .hidden { display: none; }
-  .error { color: red; text-align: center; }
-  .success { color: green; text-align: center; font-weight: bold; margin-top: 10px; white-space: pre-wrap; }
-  textarea { height: 300px; }
+  body { font-family: Arial, sans-serif; background:#fef3c7; padding:20px; }
+  .hidden { display:none; }
+  label { display:block; margin-top:15px; font-weight:600; }
+  input, select { width:100%; padding:8px; margin-top:5px; }
+  button { margin-top:20px; padding:10px 20px; background:#facc15; border:none; cursor:pointer; font-weight:bold; }
+  button:hover { background:#eab308; }
+  .question { margin:15px 0; }
+  .options label { font-weight: normal; display:block; margin:5px 0; }
+  .result { background:#d9f99d; padding:15px; margin-top:20px; border-radius:6px; }
+  .wrong { background:#fecaca; }
 </style>
 </head>
 <body>
 
-<h1>डेली क्विज़ सिस्टम</h1>
-
-<div id="loginSection">
-  <h2>Admin Login</h2>
-  <label>पासवर्ड डालें:</label>
-  <input type="password" id="adminPassword" placeholder="पासवर्ड" />
-  <button onclick="adminLogin()">लॉगिन करें</button>
-  <p id="loginError" class="error"></p>
-</div>
-
-<div id="adminPanel" class="hidden">
-  <h2>Admin Panel - क्विज़ डेटा Bulk Paste करें</h2>
-  <label>डेटा (टैब या कॉमा सेपरेटेड फ़ॉर्मेट में, पहली लाइन हेडर होनी चाहिए):</label>
-  <textarea id="bulkData" placeholder="यहाँ आपका डेटा पेस्ट करें..."></textarea>
-  <button onclick="saveBulkData()">डेटा सेव करें</button>
-  <p id="saveMessage" class="success"></p>
-  <button onclick="adminLogout()" style="background:#c0392b; margin-top:30px;">लॉगआउट करें</button>
+<div id="introSection">
+  <h2>कृपया अपना विवरण दर्ज करें</h2>
+  <label>नाम (Name)<input type="text" id="name" required /></label>
+  <label>मोबाइल नंबर (Mobile)<input type="tel" id="mobile" pattern="[0-9]{10}" required placeholder="10 अंकों का नंबर"/></label>
+  <label>श्रेणी (Category)
+    <select id="category" required>
+      <option value="">-- चुनें --</option>
+      <option value="trainee">प्रशिक्षु (Trainee)</option>
+      <option value="trainer">प्रशिक्षक (Trainer)</option>
+      <option value="visitor">आगंतुक (Visitor)</option>
+    </select>
+  </label>
+  <button id="startQuizBtn">क्विज़ शुरू करें</button>
 </div>
 
 <div id="quizSection" class="hidden">
-  <h2>डेली क्विज़</h2>
-
+  <h2>क्विज़ प्रश्न</h2>
   <form id="quizForm">
-    <label>पूरा नाम:</label>
-    <input type="text" id="userName" required placeholder="अपना नाम दर्ज करें" />
-
-    <label>मोबाइल नंबर:</label>
-    <input type="text" id="userMobile" required pattern="\\d{10}" placeholder="10 अंकों का मोबाइल नंबर" />
-
-    <label>आप कौन हैं?</label>
-    <select id="userCategory" required>
-      <option value="">-- चयन करें --</option>
-      <option value="प्रशिक्षु">प्रशिक्षु</option>
-      <option value="प्रशिक्षक">प्रशिक्षक</option>
-      <option value="विज़िटर">विज़िटर</option>
-    </select>
-
-    <div id="quizQuestions"></div>
-
-    <button type="submit">जवाब भेजें</button>
+    <!-- Questions dynamically inserted here -->
   </form>
+  <button id="submitQuizBtn" disabled>सबमिट करें</button>
+</div>
 
-  <p id="resultMessage" class="success"></p>
+<div id="resultSection" class="hidden">
+  <h2>परिणाम</h2>
+  <div id="resultDetails"></div>
 </div>
 
 <script>
-  const adminPass = "admin123"; // अपना पासवर्ड यहाँ रखें
-  const loginSection = document.getElementById("loginSection");
-  const adminPanel = document.getElementById("adminPanel");
-  const quizSection = document.getElementById("quizSection");
-  const loginError = document.getElementById("loginError");
-  const saveMessage = document.getElementById("saveMessage");
-  const bulkDataTextarea = document.getElementById("bulkData");
-  const quizQuestionsDiv = document.getElementById("quizQuestions");
-  const resultMessage = document.getElementById("resultMessage");
+// ==== Configuration ====
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyLlf5H0XntHRT5I6lFxhXi_qUeI2MLqR90RAHjE0FR4zPzfVjsKv4nWZmUIN6OtmHj/exec';  // Your Apps Script URL
 
-  // Admin Login
-  function adminLogin() {
-    const pass = document.getElementById("adminPassword").value;
-    if(pass === adminPass){
-      loginSection.classList.add("hidden");
-      adminPanel.classList.remove("hidden");
-      quizSection.classList.add("hidden");
-      loginError.textContent = "";
+// ==== Sample quiz data (आप इसे admin panel से update कर सकते हैं) ====
+const quizData = [
+  {
+    q: 'भारत का राष्ट्रीय फूल क्या है?',
+    options: ['गुलाब', 'कमल', 'सूरजमुखी', 'जैस्मीन'],
+    ans: 2
+  },
+  {
+    q: 'सौर ऊर्जा का मुख्य स्रोत क्या है?',
+    options: ['हवा', 'सूरज', 'पानी', 'बिजली'],
+    ans: 2
+  },
+  {
+    q: 'इंटरनेट की खोज किसने की?',
+    options: ['टिम बर्नर्स-ली', 'एलन ट्यूरिंग', 'बिल गेट्स', 'स्टीव जॉब्स'],
+    ans: 1
+  },
+  {
+    q: 'हाथ धोना क्यों जरूरी है?',
+    options: ['बीमारी रोकने के लिए', 'फैशन के लिए', 'गंदगी दिखाने के लिए', 'मज़ाक के लिए'],
+    ans: 1
+  },
+  {
+    q: 'जलवायु परिवर्तन के कारण क्या बढ़ता है?',
+    options: ['तापमान', 'बारिश', 'बर्फ', 'हवा'],
+    ans: 1
+  }
+];
 
-      // Load existing data if any in bulk textarea for edit
-      const allData = localStorage.getItem("quizRawData");
-      if(allData) bulkDataTextarea.value = allData;
+// ==== Variables ====
+let userData = {};
+let userAnswers = new Array(quizData.length).fill(null);
 
-      saveMessage.textContent = "";
-    } else {
-      loginError.textContent = "गलत पासवर्ड!";
-    }
+// ==== Functions ====
+
+function showIntro() {
+  document.getElementById('introSection').classList.remove('hidden');
+  document.getElementById('quizSection').classList.add('hidden');
+  document.getElementById('resultSection').classList.add('hidden');
+}
+
+function startQuiz() {
+  const name = document.getElementById('name').value.trim();
+  const mobile = document.getElementById('mobile').value.trim();
+  const category = document.getElementById('category').value;
+
+  if (!name || !mobile.match(/^\d{10}$/) || !category) {
+    alert('सभी फ़ील्ड सही से भरें।');
+    return;
   }
 
-  function adminLogout() {
-    loginSection.classList.remove("hidden");
-    adminPanel.classList.add("hidden");
-    quizSection.classList.remove("hidden");
-    document.getElementById("adminPassword").value = "";
-    saveMessage.textContent = "";
-    loadQuizForToday();
+  // Check localStorage if user already submitted today
+  const todayKey = `quiz_submitted_${mobile}_${new Date().toISOString().slice(0,10)}`;
+  if (localStorage.getItem(todayKey)) {
+    alert('आपने आज पहले ही क्विज़ दिया है।');
+    return;
   }
 
-  // Parse pasted bulk data (CSV or TSV) and save as JSON by date
-  function saveBulkData(){
-    const rawText = bulkDataTextarea.value.trim();
-    if(!rawText){
-      alert("कृपया डेटा पेस्ट करें।");
-      return;
-    }
+  userData = { name, mobile, category };
+  showQuiz();
+}
 
-    try {
-      // Save raw data for later edit
-      localStorage.setItem("quizRawData", rawText);
+function showQuiz() {
+  document.getElementById('introSection').classList.add('hidden');
+  document.getElementById('quizSection').classList.remove('hidden');
+  document.getElementById('resultSection').classList.add('hidden');
 
-      const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      if(lines.length < 2){
-        alert("डेटा कम है, कम से कम हेडर और एक लाइन होनी चाहिए।");
-        return;
-      }
+  const form = document.getElementById('quizForm');
+  form.innerHTML = '';
 
-      // detect delimiter - comma या tab
-      const delimiter = lines[0].includes(',') ? ',' : '\t';
-
-      // Parse header
-      const headers = lines[0].split(delimiter).map(h => h.trim());
-
-      // Validate header format minimum columns
-      const requiredHeaders = ["Date","Q1","Q1O1","Q1O2","Q1O3","Q1O4","Q1Ans",
-        "Q2","Q2O1","Q2O2","Q2O3","Q2O4","Q2Ans",
-        "Q3","Q3O1","Q3O2","Q3O3","Q3O4","Q3Ans",
-        "Q4","Q4O1","Q4O2","Q4O3","Q4O4","Q4Ans",
-        "Q5","Q5O1","Q5O2","Q5O3","Q5O4","Q5Ans"
-      ];
-
-      for(const h of requiredHeaders){
-        if(!headers.includes(h)){
-          alert(`Header missing: ${h}`);
-          return;
-        }
-      }
-
-      // Indexes map
-      const idxMap = {};
-      headers.forEach((h,i) => { idxMap[h] = i; });
-
-      // Process data rows
-      const quizData = {};
-
-      for(let i=1; i<lines.length; i++){
-        const row = lines[i].split(delimiter).map(c => c.trim());
-
-        const date = row[idxMap["Date"]];
-        if(!date.match(/^\d{4}-\d{2}-\d{2}$/)){
-          alert(`Invalid date format in line ${i+1}: ${date}`);
-          return;
-        }
-
-        quizData[date] = [];
-
-        for(let q=1; q<=5; q++){
-          quizData[date].push({
-            question: row[idxMap[`Q${q}`]],
-            options: [
-              row[idxMap[`Q${q}O1`]],
-              row[idxMap[`Q${q}O2`]],
-              row[idxMap[`Q${q}O3`]],
-              row[idxMap[`Q${q}O4`]],
-            ],
-            correct: Number(row[idxMap[`Q${q}Ans`]])
-          });
-        }
-      }
-
-      // Save parsed JSON data in localStorage
-      localStorage.setItem("quizData", JSON.stringify(quizData));
-
-      saveMessage.textContent = "डेटा सफलतापूर्वक सेव हो गया!";
-
-      bulkDataTextarea.value = ""; // साफ करें, चाहे आप चाहें तो रख सकते हैं
-    } catch(e){
-      alert("डेटा पार्सिंग में त्रुटि: " + e.message);
-    }
-  }
-
-  // Load today's quiz and show
-  function loadQuizForToday(){
-    const today = new Date().toISOString().slice(0,10);
-    const allData = JSON.parse(localStorage.getItem("quizData") || "{}");
-    const todayQuestions = allData[today];
-
-    quizQuestionsDiv.innerHTML = "";
-    resultMessage.textContent = "";
-
-    if(!todayQuestions){
-      quizQuestionsDiv.innerHTML = "<p>आज के लिए प्रश्न उपलब्ध नहीं हैं। कृपया बाद में पुनः प्रयास करें।</p>";
-      return;
-    }
-
-    todayQuestions.forEach((q,i) => {
-      const qDiv = document.createElement("div");
-      qDiv.classList.add("question");
-      qDiv.innerHTML = `<h3>प्रश्न ${i+1}: ${q.question}</h3>`;
-      q.options.forEach((opt,idx) => {
-        qDiv.innerHTML += `
-          <label class="option">
-            <input type="radio" name="q${i}" value="${idx+1}" required />
-            ${opt}
-          </label>`;
-      });
-      quizQuestionsDiv.appendChild(qDiv);
-    });
-  }
-
-  // On page load:
-  document.addEventListener("DOMContentLoaded", () => {
-    loginSection.classList.remove("hidden");
-    adminPanel.classList.add("hidden");
-    quizSection.classList.remove("hidden");
-
-    loadQuizForToday();
-
-    // Quiz form submit
-    document.getElementById("quizForm").addEventListener("submit", function(e){
-      e.preventDefault();
-
-      const name = document.getElementById("userName").value.trim();
-      const mobile = document.getElementById("userMobile").value.trim();
-      const category = document.getElementById("userCategory").value;
-
-      if(!name || !mobile.match(/^\d{10}$/) || !category){
-        alert("कृपया सभी जानकारी सही भरें।");
-        return;
-      }
-
-      const allData = JSON.parse(localStorage.getItem("quizData") || "{}");
-      const today = new Date().toISOString().slice(0,10);
-      const todayQuestions = allData[today];
-
-      if(!todayQuestions){
-        alert("आज के लिए प्रश्न उपलब्ध नहीं हैं।");
-        return;
-      }
-
-      let score = 0;
-
-      for(let i=0; i<todayQuestions.length; i++){
-        const selected = document.querySelector(`input[name="q${i}"]:checked`);
-        if(!selected){
-          alert("कृपया सभी प्रश्नों के उत्तर दें।");
-          return;
-        }
-        if(Number(selected.value) === todayQuestions[i].correct){
-          score++;
-        }
-      }
-
-      resultMessage.textContent = `✅ आपका स्कोर: ${score} / ${todayQuestions.length}`;
-
-      this.reset();
-    });
+  quizData.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.classList.add('question');
+    div.innerHTML = `<strong>Q${idx + 1}. ${item.q}</strong><div class="options">` +
+      item.options.map((opt, i) => `
+        <label><input type="radio" name="q${idx}" value="${i+1}" required /> ${opt}</label>
+      `).join('') + `</div>`;
+    form.appendChild(div);
   });
+
+  // Enable submit button only if all questions answered
+  form.onchange = () => {
+    const allAnswered = quizData.every((_, i) => {
+      return form[`q${i}`].value;
+    });
+    document.getElementById('submitQuizBtn').disabled = !allAnswered;
+  };
+  document.getElementById('submitQuizBtn').disabled = true;
+}
+
+function submitQuiz() {
+  const form = document.getElementById('quizForm');
+  const answers = [];
+  for(let i=0; i<quizData.length; i++) {
+    const val = form[`q${i}`].value;
+    if(!val) {
+      alert('कृपया सभी प्रश्नों का उत्तर दें।');
+      return;
+    }
+    answers.push(val);
+  }
+
+  // Calculate score
+  let score = 0;
+  for(let i=0; i<quizData.length; i++) {
+    if(parseInt(answers[i]) === quizData[i].ans) score++;
+  }
+
+  userAnswers = answers;
+
+  // Save submission in localStorage to prevent multiple attempts per day
+  const todayKey = `quiz_submitted_${userData.mobile}_${new Date().toISOString().slice(0,10)}`;
+  localStorage.setItem(todayKey, 'true');
+
+  // Send to Google Sheet backend
+  sendToSheet(answers, score);
+
+  showResult(score);
+}
+
+function showResult(score) {
+  document.getElementById('introSection').classList.add('hidden');
+  document.getElementById('quizSection').classList.add('hidden');
+  document.getElementById('resultSection').classList.remove('hidden');
+
+  const container = document.getElementById('resultDetails');
+  container.innerHTML = `<p>आपका स्कोर: <strong>${score} / ${quizData.length}</strong></p>`;
+
+  quizData.forEach((item, idx) => {
+    const userAns = parseInt(userAnswers[idx]);
+    const correctAns = item.ans;
+    const isCorrect = userAns === correctAns;
+    const div = document.createElement('div');
+    div.className = isCorrect ? 'result' : 'result wrong';
+    div.innerHTML = `
+      <strong>Q${idx+1}. ${item.q}</strong><br/>
+      आपका उत्तर: ${item.options[userAns - 1]} ${isCorrect ? '✔️' : '❌'} <br/>
+      सही उत्तर: ${item.options[correctAns - 1]}
+    `;
+    container.appendChild(div);
+  });
+}
+
+function sendToSheet(answers, score) {
+  fetch(SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: userData.name,
+      mobile: userData.mobile,
+      category: userData.category,
+      answers: answers,
+      score: score
+    }),
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+  .then(res => res.text())
+  .then(res => console.log('Data saved:', res))
+  .catch(err => console.error('Error:', err));
+}
+
+// ==== Event Listeners ====
+document.getElementById('startQuizBtn').onclick = startQuiz;
+document.getElementById('submitQuizBtn').onclick = submitQuiz;
+
 </script>
 
 </body>
