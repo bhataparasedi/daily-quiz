@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <title>डेली क्विज़ - SEDI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: 'Noto Sans Devanagari', sans-serif;
+      background: #fffbe6;
+      color: #333;
+      padding: 20px;
+      max-width: 600px;
+      margin: auto;
+    }
+    h1 {
+      color: #d35400;
+      text-align: center;
+    }
+    .question {
+      margin-top: 20px;
+      text-align: left;
+    }
+    .question h3 {
+      margin-bottom: 10px;
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      cursor: pointer;
+    }
+    input[type="text"], select {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+    button {
+      background: #27ae60;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 18px;
+      margin-top: 20px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    button:hover {
+      background: #219150;
+    }
+    .success {
+      color: green;
+      text-align: center;
+      margin-top: 15px;
+      font-weight: bold;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>📘 डेली क्विज़</h1>
+
+<form id="quizForm">
+  <label>पूरा नाम:</label>
+  <input type="text" id="name" required placeholder="अपना नाम दर्ज करें" />
+
+  <label>मोबाइल नंबर:</label>
+  <input type="text" id="mobile" required placeholder="अपना मोबाइल नंबर दर्ज करें" pattern="\\d{10}" title="10 अंकों का मोबाइल नंबर डालें" />
+
+  <label>आप कौन हैं?</label>
+  <select id="category" required>
+    <option value="">-- चयन करें --</option>
+    <option value="प्रशिक्षु">प्रशिक्षु</option>
+    <option value="प्रशिक्षक">प्रशिक्षक</option>
+    <option value="विज़िटर">विज़िटर</option>
+  </select>
+
+  <div id="questionsContainer"></div>
+
+  <button type="submit">जवाब भेजें</button>
+</form>
+
+<p class="success" id="resultMsg"></p>
+
+<script>
+  const scriptURL = 'https://script.google.com/macros/s/AKfycbzGTgh5PqiDM7cXDzo9fdMA5tx5PrwgP3H_zxeosiFx7MpjZdD-KHsta2xe30h1drgwuw/exec';
+
+  let correctAnswers = [];
+
+  async function loadQuestions() {
+    try {
+      const res = await fetch(scriptURL);
+      const data = await res.json();
+
+      if (data.error) {
+        document.getElementById("questionsContainer").innerHTML = `<p style="color:red;">${data.error}</p>`;
+        return;
+      }
+
+      const container = document.getElementById("questionsContainer");
+      container.innerHTML = "";
+
+      data.questions.forEach((q, index) => {
+        correctAnswers.push(q.correct);
+        const qDiv = document.createElement("div");
+        qDiv.classList.add("question");
+        qDiv.innerHTML = `
+          <h3>प्रश्न ${index + 1}: ${q.question}</h3>
+          ${q.options.map((opt, i) => `
+            <label>
+              <input type="radio" name="q${index}" value="${i + 1}" required />
+              ${opt}
+            </label>
+          `).join('')}
+        `;
+        container.appendChild(qDiv);
+      });
+    } catch (err) {
+      document.getElementById("questionsContainer").innerHTML = `<p style="color:red;">प्रश्न लोड करने में त्रुटि: ${err.message}</p>`;
+    }
+  }
+
+  loadQuestions();
+
+  document.getElementById("quizForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+
+    const name = document.getElementById("name").value.trim();
+    const mobile = document.getElementById("mobile").value.trim();
+    const category = document.getElementById("category").value;
+
+    if (!name || !mobile.match(/^\\d{10}$/) || !category) {
+      alert("कृपया सही जानकारी भरें।");
+      return;
+    }
+
+    let userAnswers = [];
+    let score = 0;
+
+    for (let i = 0; i < 5; i++) {
+      const selected = document.querySelector(`input[name="q${i}"]:checked`);
+      if (!selected) {
+        alert("कृपया सभी प्रश्नों के उत्तर दें।");
+        return;
+      }
+      userAnswers.push(selected.value);
+      if (selected.value == correctAnswers[i]) score++;
+    }
+
+    const payload = {
+      name,
+      mobile,
+      category,
+      answers: userAnswers,
+      score
+    };
+
+    try {
+      const response = await fetch(scriptURL, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" }
+      });
+
+      if (response.ok) {
+        document.getElementById("resultMsg").innerText = `✅ आपका स्कोर: ${score} / 5`;
+        document.getElementById("quizForm").reset();
+        document.getElementById("questionsContainer").innerHTML = "";
+        correctAnswers = [];
+        await loadQuestions(); // अगले दिन के लिए या पुनः लोड के लिए सवाल लोड करें
+      } else {
+        alert("जवाब भेजने में त्रुटि हुई। कृपया पुनः प्रयास करें।");
+      }
+    } catch (err) {
+      alert("नेटवर्क त्रुटि: " + err.message);
+    }
+  });
+</script>
+
+</body>
+</html>
