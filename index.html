@@ -91,40 +91,55 @@
 
   let correctAnswers = [];
 
-  async function loadQuestions() {
-    try {
-      const res = await fetch(scriptURL);
-      const data = await res.json();
+  function loadQuestions() {
+    return new Promise((resolve, reject) => {
+      const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
 
-      if (data.error) {
-        document.getElementById("questionsContainer").innerHTML = `<p style="color:red;">${data.error}</p>`;
-        return;
-      }
+      window[callbackName] = function(data) {
+        delete window[callbackName];
+        document.body.removeChild(script);
+        resolve(data);
+      };
 
-      const container = document.getElementById("questionsContainer");
-      container.innerHTML = "";
-
-      data.questions.forEach((q, index) => {
-        correctAnswers.push(q.correct);
-        const qDiv = document.createElement("div");
-        qDiv.classList.add("question");
-        qDiv.innerHTML = `
-          <h3>प्रश्न ${index + 1}: ${q.question}</h3>
-          ${q.options.map((opt, i) => `
-            <label>
-              <input type="radio" name="q${index}" value="${i + 1}" required />
-              ${opt}
-            </label>
-          `).join('')}
-        `;
-        container.appendChild(qDiv);
-      });
-    } catch (err) {
-      document.getElementById("questionsContainer").innerHTML = `<p style="color:red;">प्रश्न लोड करने में त्रुटि: ${err.message}</p>`;
-    }
+      const script = document.createElement('script');
+      script.src = scriptURL + '?callback=' + callbackName;
+      script.onerror = () => {
+        delete window[callbackName];
+        document.body.removeChild(script);
+        reject(new Error('स्क्रिप्ट लोड करने में त्रुटि'));
+      };
+      document.body.appendChild(script);
+    });
   }
 
-  loadQuestions();
+  loadQuestions().then(data => {
+    if (data.error) {
+      document.getElementById("questionsContainer").innerHTML = `<p style="color:red;">${data.error}</p>`;
+      return;
+    }
+
+    const container = document.getElementById("questionsContainer");
+    container.innerHTML = "";
+    correctAnswers = [];
+
+    data.questions.forEach((q, index) => {
+      correctAnswers.push(q.correct);
+      const qDiv = document.createElement("div");
+      qDiv.classList.add("question");
+      qDiv.innerHTML = `
+        <h3>प्रश्न ${index + 1}: ${q.question}</h3>
+        ${q.options.map((opt, i) => `
+          <label>
+            <input type="radio" name="q${index}" value="${i + 1}" required />
+            ${opt}
+          </label>
+        `).join('')}
+      `;
+      container.appendChild(qDiv);
+    });
+  }).catch(err => {
+    document.getElementById("questionsContainer").innerHTML = `<p style="color:red;">प्रश्न लोड करने में त्रुटि: ${err.message}</p>`;
+  });
 
   document.getElementById("quizForm").addEventListener("submit", async function(e) {
     e.preventDefault();
@@ -133,7 +148,7 @@
     const mobile = document.getElementById("mobile").value.trim();
     const category = document.getElementById("category").value;
 
-    if (!name || !mobile.match(/^\\d{10}$/) || !category) {
+    if (!name || !mobile.match(/^\d{10}$/) || !category) {
       alert("कृपया सही जानकारी भरें।");
       return;
     }
@@ -160,18 +175,17 @@
     };
 
     try {
-      const response = await fetch(scriptURL, {
+      const res = await fetch(scriptURL, {
         method: "POST",
         body: JSON.stringify(payload),
         headers: { "Content-Type": "application/json" }
       });
 
-      if (response.ok) {
+      if (res.ok) {
         document.getElementById("resultMsg").innerText = `✅ आपका स्कोर: ${score} / 5`;
         document.getElementById("quizForm").reset();
         document.getElementById("questionsContainer").innerHTML = "";
-        correctAnswers = [];
-        await loadQuestions(); // अगले दिन के लिए या पुनः लोड के लिए सवाल लोड करें
+        await loadQuestions();
       } else {
         alert("जवाब भेजने में त्रुटि हुई। कृपया पुनः प्रयास करें।");
       }
