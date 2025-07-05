@@ -195,7 +195,7 @@ function showResult(score) {
 }
 
 function sendToSheet(answers, score) {
-  fetch(SCRIPT_URL, {
+  fetch('https://script.google.com/macros/s/AKfycbyLlf5H0XntHRT5I6lFxhXi_qUeI2MLqR90RAHjE0FR4zPzfVjsKv4nWZmUIN6OtmHj/exec', {
     method: 'POST',
     body: JSON.stringify({
       name: userData.name,
